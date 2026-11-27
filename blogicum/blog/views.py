@@ -16,22 +16,34 @@ User = get_user_model()
 POSTS_PER_PAGE = 10
 
 
-def get_posts(queryset=Post.objects.all(), only_published=True):
-    queryset = queryset.select_related(
-        'category', 'location', 'author'
-    ).annotate(comment_count=Count('comments')).order_by('-pub_date')
-    if only_published:
-        queryset = queryset.filter(
-            is_published=True,
-            pub_date__lte=timezone.now(),
-            category__is_published=True,
-        )
-    return queryset
+#отдельные функици для фильтрации и каунт, post_detail было два запроса, убрали, для строковых значений переменные
+#в функции профайл и эдит профайл тоже самое в зависимости от пользователя посты, кроме из паблишд есть еще дата публикаци
 
 
 def paginate(request, queryset):
     paginator = Paginator(queryset, POSTS_PER_PAGE)
     return paginator.get_page(request.GET.get('page'))
+
+
+def filtrate(queryset):
+    queryset = queryset.filter(
+        is_published=True,
+        pub_date__lte=timezone.now(),
+        category__is_published=True,
+    )
+    return queryset
+
+
+def count_comments(queryset):
+    return queryset.annotate(comment_count=Count('comments'))
+
+
+def get_posts(queryset=Post.objects.all(), only_published=True):
+    queryset = queryset.select_related('category', 'location', 'author')
+    queryset = count_comments(queryset)
+    if only_published:
+        queryset = filtrate(queryset)
+    return queryset.order_by('-pub_date')
 
 
 def index(request):
@@ -41,8 +53,6 @@ def index(request):
 
 def post_detail(request, post_id):
     post = get_object_or_404(Post, pk=post_id)
-    if post.author != request.user:
-        post = get_object_or_404(get_posts(), pk=post_id)
     context = {
         'post': post,
         'form': CommentForm(),
@@ -53,15 +63,16 @@ def post_detail(request, post_id):
 
 def category_posts(request, category_slug):
     category = get_object_or_404(
-        Category, slug=category_slug, is_published=True
+        Category, slug=category_slug, is_published=True,
     )
     page_obj = paginate(
-        request, get_posts(Post.objects.filter(category=category))
+        request, get_posts(Post.objects.filter(category=category)),
     )
+    context = {'category': category, 'page_obj': page_obj}
     return render(
         request,
         'blog/category.html',
-        {'category': category, 'page_obj': page_obj},
+        context,
     )
 
 
@@ -78,21 +89,23 @@ def profile(request, username):
 @login_required
 def edit_profile(request):
     form = UserEditForm(request.POST or None, instance=request.user)
+    context = {'form': form}
     if form.is_valid():
         form.save()
         return redirect('blog:profile', request.user.username)
-    return render(request, 'blog/user.html', {'form': form})
+    return render(request, 'blog/user.html', context)
 
 
 @login_required
 def create_post(request):
     form = PostForm(request.POST or None, files=request.FILES or None)
+    context = {'form': form}
     if form.is_valid():
         post = form.save(commit=False)
         post.author = request.user
         post.save()
         return redirect('blog:profile', request.user.username)
-    return render(request, 'blog/create.html', {'form': form})
+    return render(request, 'blog/create.html', context)
 
 
 @login_required
@@ -125,13 +138,9 @@ def add_comment(request, post_id):
     post = get_object_or_404(Post, pk=post_id)
     form = CommentForm(request.POST)
     if form.is_valid():
-        # Создаём объект поздравления, но не сохраняем его в БД.
         words = form.save(commit=False)
-        # В поле author передаём объект автора поздравления.
         words.author = request.user
-        # В поле birthday передаём объект дня рождения.
         words.post = post
-        # Сохраняем объект в БД.
         words.save()
     return redirect('blog:post_detail', post_id=post_id)
 

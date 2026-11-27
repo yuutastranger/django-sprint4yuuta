@@ -29,6 +29,10 @@ class Category(BaseModel):
     class Meta:
         verbose_name = 'категория'
         verbose_name_plural = 'Категории'
+        ordering = ('slug',)
+
+    def __str__(self):
+        return self.title
 
 
 class Location(BaseModel):
@@ -37,6 +41,10 @@ class Location(BaseModel):
     class Meta:
         verbose_name = 'местоположение'
         verbose_name_plural = 'Местоположения'
+        ordering = ('name',)
+
+    def __str__(self):
+        return self.name
 
 
 class Post(BaseModel):
@@ -68,6 +76,7 @@ class Post(BaseModel):
         'Изображение',
         blank=True, upload_to='posts_images',
         )
+    
     class Meta:
         verbose_name = 'публикация'
         verbose_name_plural = 'Публикации'
